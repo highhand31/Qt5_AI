@@ -1,6 +1,6 @@
 import sys
 #from PyQt5 import QtCore
-from PyQt5.QtWidgets import QApplication,QFileDialog,QMainWindow
+from PyQt5.QtWidgets import QApplication,QFileDialog,QMainWindow,QGridLayout,QGraphicsScene
 from PyQt5.QtCore import QObject,pyqtSignal,QThread,Qt
 #import PyQt5.sip #fro Pyinstaller
 # from MatplotlibWidget import MatplotlibWidget
@@ -12,6 +12,12 @@ import autoencoder_test as auto
 import socket as sc
 # import numpy as np
 import json
+import os
+from myFigure import MyFigure
+import cv2
+
+
+
 
 # The new Stream Object which replaces the default stream associated with sys.stdout
 # This object just puts data in a queue!
@@ -150,11 +156,31 @@ class AppWindow(QMainWindow):
         self.thread_UDP_listener.started.connect(self.UDP_listen.run)
         self.thread_UDP_listener.start()
 
+        #setup exam graphics
+        self.Fig_normal = MyFigure(width=3, height=3)  # 顯示normal pic
+        self.Fig_exam = MyFigure(width=3, height=3)  # 顯示exam pic
+
+        # 在GUI的groupBox中创建一个布局，用于添加MyFigure类的实例（即图形）后其他部件。
+        self.scene_1 = QGraphicsScene()  # 创建一个场景
+        self.scene_1.addWidget(self.Fig_normal)  # 将图形元素添加到场景中
+        self.ui.graphV_normal.setScene(self.scene_1)  # 将创建添加到图形视图显示窗口
+        self.ui.graphV_normal.show()  # 显示
+        self.plot_normal = self.Fig_normal.fig.add_subplot(1, 1, 1)
+
+        self.scene_2 = QGraphicsScene()  # 创建一个场景
+        self.scene_2.addWidget(self.Fig_exam)  # 将图形元素添加到场景中
+        self.ui.graphV_defect.setScene(self.scene_2)  # 将创建添加到图形视图显示窗口
+        self.ui.graphV_defect.show()  # 显示
+        self.plot_defect = self.Fig_exam.fig.add_subplot(1, 1, 1)
+
 
         #setup events
         self.ui.btn_train_dir.clicked.connect(self.btn_train_dir_clicked)
         self.ui.btn_test_dir.clicked.connect(self.btn_test_dir_clicked)
         self.ui.btn_data_process.clicked.connect(self.btn_AI_training_clicked)
+        self.ui.btn_exam_dir.clicked.connect(self.btn_exam_dir_clicked)
+        self.ui.btn_prev.clicked.connect(self.btn_prev_clicked)
+        self.ui.btn_next.clicked.connect(self.btn_next_clicked)
 
 
         #UI plot code(temp)
@@ -176,6 +202,61 @@ class AppWindow(QMainWindow):
         self.test_dir_name = QFileDialog.getExistingDirectory(self, "select Test data directory")
         self.test_dir_name = repr(self.test_dir_name)[1:-1]
         self.ui.test_dir_display_2.setText(self.test_dir_name)
+
+    def btn_exam_dir_clicked(self):
+        self.exam_dir_name = QFileDialog.getExistingDirectory(self, "select Exam data directory")
+        self.exam_dir_name = repr(self.exam_dir_name)[1:-1]
+        self.ui.exam_dir_display.setText(self.exam_dir_name)
+
+        #紀錄所有圖片的路徑
+        self.exam_pic_addrs = [file.path for file in os.scandir(self.exam_dir_name) if file.is_file()]
+
+        self.index = 0  # 預設圖片index
+        self.exam_pic_num = len(self.exam_pic_addrs)
+        print("Picture number of dir({}) is {} ".format(self.exam_dir_name, self.exam_pic_num))
+
+        # display the pic
+        self.img = cv2.imread(self.exam_pic_addrs[0])
+        self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2RGB)
+        self.plot_normal.imshow(self.img)
+        self.plot_normal.axis("off")
+        self.Fig_normal.draw()  # 一定要這行才能顯示出圖片
+
+    def btn_next_clicked(self):
+        #disable btn
+        self.ui.btn_next.setEnabled(False)
+        #index
+        self.index += 1
+        # if self.number > len(self.files):
+        self.index = min(self.index, len(self.exam_pic_addrs) - 1)
+
+        #display the pic
+        self.img = cv2.imread(self.exam_pic_addrs[self.index])
+        self.img = cv2.cvtColor(self.img,cv2.COLOR_BGR2RGB)
+        self.plot_normal.imshow(self.img)
+        self.plot_normal.axis("off")
+        self.Fig_normal.draw()  # 一定要這行才能顯示出圖片
+
+
+        # self.image.load(self.files[self.number])
+        # self.LoadImage()
+        self.ui.btn_next.setEnabled(True)
+
+    def btn_prev_clicked(self):
+        self.ui.btn_prev.setEnabled(False)
+        self.index -= 1
+        self.index = max(0,self.index)
+
+        # display the pic
+        self.img = cv2.imread(self.exam_pic_addrs[self.index])
+        self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2RGB)
+        self.plot_normal.imshow(self.img)
+        self.plot_normal.axis("off")
+        self.Fig_normal.draw()  # 一定要這行才能顯示出圖片
+
+        self.ui.btn_prev.setEnabled(True)
+
+
 
     def UDP_get_data(self,text):
 
