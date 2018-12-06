@@ -18,6 +18,7 @@ import cv2
 import tensorflow as tf
 from tensorflow.python.platform import gfile
 import csv
+import matplotlib.image as mpimg
 
 
 
@@ -130,6 +131,10 @@ class AppWindow(QMainWindow):
         self.ui = Ui_Form()
         self.ui.setupUi(self)
 
+        # 建立圖片格式的集合
+        self.pic_format = {".jpg", ".jpeg", ".jpe", ".bmp", ".dib", ".jp2", ".png", ".webp", ".pbm",
+                           ".pgm", ".ppm", ".sr", ".ras", ".tiff", ".tif"}
+
         #UI init
         self.ui.batchEdit.setHidden(True)#隱藏，因為使用unpool_with_argmax，batch size限制在1
         self.ui.label_15.setHidden(True)#隱藏，因為使用unpool_with_argmax，batch size限制在1
@@ -170,8 +175,8 @@ class AppWindow(QMainWindow):
         self.thread_UDP_listener.start()
 
         #setup exam graphics
-        self.Fig_normal = MyFigure(width=3, height=3)  # 顯示normal pic
-        self.Fig_exam = MyFigure(width=3, height=3)  # 顯示exam pic
+        self.Fig_normal = MyFigure(width=4, height=4)  # 顯示normal pic
+        #self.Fig_exam = MyFigure(width=3, height=3)  # 顯示exam pic
 
         # 在GUI的graphicsView上建立QGraphicsScene，再其上增加以matplotlib圖形為主的FigureCanvas物件
         self.scene_1 = QGraphicsScene()  # 建立場景QGraphicsScene
@@ -181,12 +186,12 @@ class AppWindow(QMainWindow):
         self.plot_normal = self.Fig_normal.fig.add_subplot(1, 1, 1)#在圖形元素中添加圖
         self.plot_normal.axis("off")
 
-        self.scene_2 = QGraphicsScene()
-        self.scene_2.addWidget(self.Fig_exam)
-        self.ui.graphV_defect.setScene(self.scene_2)
-        self.ui.graphV_defect.show()
-        self.plot_defect = self.Fig_exam.fig.add_subplot(1, 1, 1)
-        self.plot_defect.axis("off")
+        # self.scene_2 = QGraphicsScene()
+        # self.scene_2.addWidget(self.Fig_exam)
+        # self.ui.graphV_defect.setScene(self.scene_2)
+        # self.ui.graphV_defect.show()
+        # self.plot_defect = self.Fig_exam.fig.add_subplot(1, 1, 1)
+        # self.plot_defect.axis("off")
 
 
         #setup events
@@ -211,48 +216,78 @@ class AppWindow(QMainWindow):
 
     def btn_train_dir_clicked(self):
         self.train_dir_name = QFileDialog.getExistingDirectory(self, "select Train data directory")
-        self.train_dir_name = repr(self.train_dir_name)[1:-1]
+        #self.train_dir_name = repr(self.train_dir_name)[1:-1]
         self.ui.train_dir_display.setText(self.train_dir_name)
 
     def btn_test_dir_clicked(self):
         self.test_dir_name = QFileDialog.getExistingDirectory(self, "select Test data directory")
-        self.test_dir_name = repr(self.test_dir_name)[1:-1]
+        #self.test_dir_name = repr(self.test_dir_name)[1:-1]
         self.ui.test_dir_display_2.setText(self.test_dir_name)
 
     def btn_exam_dir_clicked(self):
         self.exam_dir_name = QFileDialog.getExistingDirectory(self, "select Exam data directory")
-        self.exam_dir_name = repr(self.exam_dir_name)[1:-1]
-        self.ui.exam_dir_display.setText(self.exam_dir_name)
 
-        #紀錄所有圖片的路徑
-        self.exam_pic_addrs = [file.path for file in os.scandir(self.exam_dir_name) if file.is_file()]
+        if not self.exam_dir_name == "":
+            # self.exam_dir_name = "r" + "'" + self.exam_dir_name + "'"
+            #self.exam_dir_name = unicode(self.exam_dir_name, 'utf8')
+            #self.exam_dir_name = repr(self.exam_dir_name)[1:-1]
+            self.ui.exam_dir_display.setText(self.exam_dir_name)
 
-        self.index = 0  # 預設圖片index
-        self.exam_pic_num = len(self.exam_pic_addrs)
-        print("Picture number of dir({}) is {} ".format(self.exam_dir_name, self.exam_pic_num))
+            #紀錄所有圖片的路徑
+                #先記錄資料夾內所有"檔案"的路徑
+            try:
+                temp = [file.path for file in os.scandir(self.exam_dir_name) if file.is_file()]
+                self.exam_pic_addrs = []
+                for item in temp:
+                    #分離路徑的副檔名，[-1]表示檔案的格式
+                    item_format = os.path.splitext(item)[-1]
+                    #檢查檔案格式是否屬於預設的圖片格式
+                    if item_format in self.pic_format:
+                        self.exam_pic_addrs.append(item)
 
-        # display the pic
-        self.img = cv2.imread(self.exam_pic_addrs[0])
-        self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2RGB)
-        self.plot_normal.imshow(self.img)
-        self.plot_normal.axis("off")
-        self.Fig_normal.draw()  # 一定要這行才能顯示出圖片
+                if self.exam_pic_addrs == []:
+                    self.ui.textEdit_exam.append("資料夾內沒有圖片，請重新選擇")
+
+                else:
+                    self.index = 0  # 預設圖片index
+                    self.exam_pic_num = len(self.exam_pic_addrs)
+                    print("Picture number of dir({}) is {} ".format(self.exam_dir_name, self.exam_pic_num))
+                    # display the pic
+                    # self.img = cv2.imread(self.exam_pic_addrs[0])
+                    # self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2RGB)
+                    #使用cv2.imread容易因為路徑有\的相關問題，改用mpimg
+                    self.img = mpimg.imread(self.exam_pic_addrs[0])
+                    self.plot_normal.imshow(self.img)
+                    self.plot_normal.axis("off")
+                    self.Fig_normal.draw()  # 一定要這行才能顯示出圖片
+            except:
+                self.ui.textEdit_exam.append("錯誤發生")
+
+        else:
+            self.ui.textEdit_exam.append("沒有選擇到資料夾，請重新選擇")
+
+
+
 
     def btn_next_clicked(self):
         #disable btn
         self.ui.btn_next.setEnabled(False)
+        #clear label_exam_warn
+        self.ui.label_exam_warn.clear()
         #index
         self.index += 1
         # if self.number > len(self.files):
         self.index = min(self.index, len(self.exam_pic_addrs) - 1)
+        if self.index == len(self.exam_pic_addrs) - 1:
+            self.ui.label_exam_warn.setText("已是最後1張圖片")
 
         #display the pic
-        self.img = cv2.imread(self.exam_pic_addrs[self.index])
-        self.img = cv2.cvtColor(self.img,cv2.COLOR_BGR2RGB)
+        # self.img = cv2.imread(self.exam_pic_addrs[self.index])
+        # self.img = cv2.cvtColor(self.img,cv2.COLOR_BGR2RGB)
+        self.img = mpimg.imread(self.exam_pic_addrs[self.index])
         self.plot_normal.imshow(self.img)
         self.plot_normal.axis("off")
         self.Fig_normal.draw()  # 一定要這行才能顯示出圖片
-
 
         # self.image.load(self.files[self.number])
         # self.LoadImage()
@@ -260,12 +295,17 @@ class AppWindow(QMainWindow):
 
     def btn_prev_clicked(self):
         self.ui.btn_prev.setEnabled(False)
+        # clear label_exam_warn
+        self.ui.label_exam_warn.clear()
         self.index -= 1
         self.index = max(0,self.index)
+        if self.index == 0:
+            self.ui.label_exam_warn.setText("已是第1張圖片")
 
         # display the pic
-        self.img = cv2.imread(self.exam_pic_addrs[self.index])
-        self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2RGB)
+        # self.img = cv2.imread(self.exam_pic_addrs[self.index])
+        # self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2RGB)
+        self.img = mpimg.imread(self.exam_pic_addrs[self.index])
         self.plot_normal.imshow(self.img)
         self.plot_normal.axis("off")
         self.Fig_normal.draw()  # 一定要這行才能顯示出圖片
@@ -273,8 +313,14 @@ class AppWindow(QMainWindow):
         self.ui.btn_prev.setEnabled(True)
 
     def btn_detect_clicked(self):
-        #self.ui.textEdit_exam.clear()
+        # 清除之前的文字內容
+        self.ui.textEdit_exam.clear()
+        #PB檔位址
         model_filename = "model_saver/pb_test_model.pb"
+        #暫停按鈕功能
+        self.ui.btn_next.setEnabled(False)
+        self.ui.btn_prev.setEnabled(False)
+        self.ui.btn_detect.setEnabled(False)
 
         #檢驗GPU Ratio
         if self.GPU_ratio >= 0.9:
@@ -314,14 +360,15 @@ class AppWindow(QMainWindow):
                 input_test = np.array(input_test)
                 input_test.astype("float32")
                 input_test = input_test / 255
-
+                #tf.Session execution
                 prediction = sess.run(result, feed_dict={input_x: input_test[0:1]})#一次僅能投一張圖片
                 predict_loss = sess.run(loss,feed_dict={input_x: input_test[0:1]})
 
-                diff = np.abs(prediction - input_test)
-                self.plot_defect.imshow(diff[0])
-                self.plot_defect.axis("off")
-                self.Fig_exam.draw()  # 一定要這行才能顯示出圖片
+                #picture display
+                # diff = np.abs(prediction - input_test)
+                # self.plot_defect.imshow(diff[0])
+                # self.plot_defect.axis("off")
+                # self.Fig_exam.draw()  # 一定要這行才能顯示出圖片
 
                 #read the train loss from csv file
                 file_name = "train_notes.csv"
@@ -330,13 +377,23 @@ class AppWindow(QMainWindow):
                     dictReader = csv.DictReader(csvFile)
                     for item in dictReader:
                         train_loss = item["average loss"]
+                        train_stdv = item["stdv"]
 
                 try:
                     train_loss = float(train_loss)
+                    train_stdv = float(train_stdv)
                     self.ui.textEdit_exam.append("average loss = {}".format(train_loss))
+                    self.ui.textEdit_exam.append("standard deviation= {}".format(train_stdv))
                     self.ui.textEdit_exam.append("exam pic loss = {}".format(predict_loss))
                     self.ui.textEdit_exam.append("average loss type= {}".format(type(train_loss)))
+                    predict_loss = float(predict_loss)
                     self.ui.textEdit_exam.append("exam pic loss type= {}".format(type(predict_loss)))
+
+                    if predict_loss <= train_loss+1*train_stdv:
+                        self.ui.textEdit_exam.append("Good")
+                    else:
+                        self.ui.textEdit_exam.append("NG")
+
                 except ValueError:
                     self.ui.textEdit_exam.append("train loss is not float value")
 
@@ -346,7 +403,10 @@ class AppWindow(QMainWindow):
                 #
                 # else:
                 #     self.ui.textEdit_exam.append("The picture is NG")
-
+        # 開啟按鈕功能
+        self.ui.btn_next.setEnabled(True)
+        self.ui.btn_prev.setEnabled(True)
+        self.ui.btn_detect.setEnabled(True)
 
 
 
@@ -615,6 +675,16 @@ class AppWindow(QMainWindow):
         self.thread.quit()
         self.ui.consoleEdit.append("AI model execution is finished")
         self.ui.btn_data_process.setEnabled(True)
+
+    def pic_addr_check(self,pic_path):
+        temp = [file.path for file in os.scandir(pic_path) if file.is_file()]
+        pic_addrs = []
+        for item in temp:
+            # 分離路徑的副檔名，[-1]表示檔案的格式
+            item_format = os.path.splitext(item)[-1]
+            # 檢查檔案格式是否屬於預設的圖片格式
+            if item_format in self.pic_format:
+                self.exam_pic_addrs.append(item)
 
 
 

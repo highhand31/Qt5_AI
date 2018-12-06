@@ -3,6 +3,7 @@
 import cv2
 import os
 import numpy as np
+import matplotlib.image as mpimg
 import time
 import matplotlib.pyplot as plt
 
@@ -45,8 +46,9 @@ def data_load(pic_path, train_ratio, resize=None, shuffle=True, normalize=True, 
 
                 for pic_num, file in enumerate(files):
 
-                    img = cv2.imread(file)
-                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    # img = cv2.imread(file)
+                    # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    img = mpimg.imread((file))
 
                     # 圖片進行resize
                     if resize is not None:
@@ -70,9 +72,10 @@ def data_load(pic_path, train_ratio, resize=None, shuffle=True, normalize=True, 
 
         for pic_num,file in enumerate(files):
             #print(file)
-            img = cv2.imread(file)
+            # img = cv2.imread(file)
             #print(img.shape)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = mpimg.imread((file))
 
             # 圖片進行resize
             if resize is not None:
@@ -114,3 +117,12 @@ def data_load(pic_path, train_ratio, resize=None, shuffle=True, normalize=True, 
     print(labels)
 
     return (x_train, x_train_label, x_test, x_test_label)
+
+if __name__ == "__main__":
+    pic_path = r'./xxx'
+    (x_train_2, x_train_label_2, x_test_2, x_test_label_2) = data_load(pic_path, 0.5, resize=(64, 64),
+                                                                          shuffle=True, normalize=True)
+    # print('x_train shape = ',x_train_2.shape)
+    # print('x_train_label shape = ',x_train_label_2.shape)
+    print('x_test shape = ', x_test_2.shape)
+    print('x_test_label shape = ', x_test_label_2.shape)

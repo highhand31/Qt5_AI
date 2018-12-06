@@ -359,15 +359,16 @@ class AE():
                     train_loss.append(single_loss)
 
                 train_loss = np.array(train_loss)
+                train_stdv = np.std(train_loss)
                 train_loss = np.mean(train_loss)
 
                 #record train loss in the csv file
                 file_name = "train_notes.csv"
                 with open(file_name,"w") as csvFile:
-                    fields = ["average loss"]
+                    fields = ["average loss","stdv"]
                     dictWriter = csv.DictWriter(csvFile,fieldnames=fields)
                     dictWriter.writeheader()
-                    dictWriter.writerow({"average loss":train_loss})
+                    dictWriter.writerow({"average loss":train_loss, "stdv":train_stdv})
 
 
                 # test data mean loss after a epoch
