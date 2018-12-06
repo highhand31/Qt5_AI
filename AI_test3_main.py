@@ -8,13 +8,16 @@ from PyQt5.QtCore import QObject,pyqtSignal,QThread,Qt
 from AI_test3 import Ui_Form
 import common as cm
 from queue import Queue
-import autoencoder_test as auto
+import AI_one_class as AI
 import socket as sc
-# import numpy as np
+import numpy as np
 import json
 import os
 from myFigure import MyFigure
 import cv2
+import tensorflow as tf
+from tensorflow.python.platform import gfile
+import csv
 
 
 
@@ -87,7 +90,7 @@ class AI_model(QObject):
         #test data param
         self.test_dir_name = self.AI_var['test_dir_name']
         self.test_ratio = 0
-        self.test_has_dir = True
+        self.test_has_dir = False
         #training param
         self.epoch = self.AI_var['epoch']
         self.batch_size = self.AI_var['batch_size']
@@ -114,7 +117,7 @@ class AI_model(QObject):
         print('Test data shape = {}'.format(x_test.shape))
         print('Test label shape = {}'.format(y_test_label.shape))
 
-        self.ae = auto.AE()
+        self.ae = AI.AE()
         self.ae.train(x_train,x_test,y_test_label,self.GPU_ratio,self.epoch,
                       self.batch_size,self.fine_tune,self.save_ckpt)
 
@@ -127,13 +130,23 @@ class AppWindow(QMainWindow):
         self.ui = Ui_Form()
         self.ui.setupUi(self)
 
+        #UI init
+        self.ui.batchEdit.setHidden(True)#隱藏，因為使用unpool_with_argmax，batch size限制在1
+        self.ui.label_15.setHidden(True)#隱藏，因為使用unpool_with_argmax，batch size限制在1
+
+
         #variables init
         self.train_dir_name = self.ui.train_dir_display.placeholderText()
         self.test_dir_name = self.ui.test_dir_display_2.placeholderText()
         self.AI_var = {}
         self.epoch = self.ui.epochEdit.text()
-        self.batch_size = self.ui.batchEdit.text()
-        self.GPU_ratio = self.ui.gpuratioEdit.text()
+        self.resize_height = int(self.ui.heightEdit.text())
+        self.resize_width = int(self.ui.widthEdit.text())
+        self.GPU_ratio = float(self.ui.gpuratioEdit.text())
+        # print(self.resize_height)
+        # print(type(self.resize_height))
+        # self.batch_size = self.ui.batchEdit.text()
+        self.batch_size = 1
 
         #sys.stdout change to queue
         self.queue = Queue()
@@ -160,18 +173,20 @@ class AppWindow(QMainWindow):
         self.Fig_normal = MyFigure(width=3, height=3)  # 顯示normal pic
         self.Fig_exam = MyFigure(width=3, height=3)  # 顯示exam pic
 
-        # 在GUI的groupBox中创建一个布局，用于添加MyFigure类的实例（即图形）后其他部件。
-        self.scene_1 = QGraphicsScene()  # 创建一个场景
-        self.scene_1.addWidget(self.Fig_normal)  # 将图形元素添加到场景中
-        self.ui.graphV_normal.setScene(self.scene_1)  # 将创建添加到图形视图显示窗口
-        self.ui.graphV_normal.show()  # 显示
-        self.plot_normal = self.Fig_normal.fig.add_subplot(1, 1, 1)
+        # 在GUI的graphicsView上建立QGraphicsScene，再其上增加以matplotlib圖形為主的FigureCanvas物件
+        self.scene_1 = QGraphicsScene()  # 建立場景QGraphicsScene
+        self.scene_1.addWidget(self.Fig_normal)  # 將圖形元素添加到場景中
+        self.ui.graphV_normal.setScene(self.scene_1)  # 將場景添加至graphicsView中
+        self.ui.graphV_normal.show()  #顯示
+        self.plot_normal = self.Fig_normal.fig.add_subplot(1, 1, 1)#在圖形元素中添加圖
+        self.plot_normal.axis("off")
 
-        self.scene_2 = QGraphicsScene()  # 创建一个场景
-        self.scene_2.addWidget(self.Fig_exam)  # 将图形元素添加到场景中
-        self.ui.graphV_defect.setScene(self.scene_2)  # 将创建添加到图形视图显示窗口
-        self.ui.graphV_defect.show()  # 显示
+        self.scene_2 = QGraphicsScene()
+        self.scene_2.addWidget(self.Fig_exam)
+        self.ui.graphV_defect.setScene(self.scene_2)
+        self.ui.graphV_defect.show()
         self.plot_defect = self.Fig_exam.fig.add_subplot(1, 1, 1)
+        self.plot_defect.axis("off")
 
 
         #setup events
@@ -181,6 +196,7 @@ class AppWindow(QMainWindow):
         self.ui.btn_exam_dir.clicked.connect(self.btn_exam_dir_clicked)
         self.ui.btn_prev.clicked.connect(self.btn_prev_clicked)
         self.ui.btn_next.clicked.connect(self.btn_next_clicked)
+        self.ui.btn_detect.clicked.connect(self.btn_detect_clicked)
 
 
         #UI plot code(temp)
@@ -255,6 +271,84 @@ class AppWindow(QMainWindow):
         self.Fig_normal.draw()  # 一定要這行才能顯示出圖片
 
         self.ui.btn_prev.setEnabled(True)
+
+    def btn_detect_clicked(self):
+        #self.ui.textEdit_exam.clear()
+        model_filename = "model_saver/pb_test_model.pb"
+
+        #檢驗GPU Ratio
+        if self.GPU_ratio >= 0.9:
+            self.ui.textEdit_exam.setText("訓練GPU ratio已經使用{}，GPU資源不夠進行圖片驗證".format(self.GPU_ratio))
+        else:
+            GPU_ratio_exam = 0.1
+            #self.ui.textEdit_exam.setText("圖片驗證的GPU ratio = {}".format(GPU_ratio_exam))
+
+            #設定GPU參數
+            config = tf.ConfigProto(log_device_placement=True,
+                                    allow_soft_placement=True,  # 允許當找不到設備時自動轉換成有支援的設備
+                                    )
+            config.gpu_options.per_process_gpu_memory_fraction = GPU_ratio_exam
+            with tf.Session(config=config) as sess:
+                with gfile.FastGFile(model_filename, 'rb') as f:
+                    graph_def = tf.GraphDef()
+                    graph_def.ParseFromString(f.read())
+                    sess.graph.as_default()
+
+                    tf.import_graph_def(graph_def, name='')  # 導入計算圖
+                    # self.ui.textEdit_exam.append("ok1")
+
+                sess.run(tf.global_variables_initializer())
+                input_x = sess.graph.get_tensor_by_name("input_x:0")
+                loss = sess.graph.get_tensor_by_name("loss:0")
+                result = sess.graph.get_tensor_by_name("output/Relu:0")
+                # self.ui.textEdit_exam.append("ok2")
+
+                pb_height = result.shape[1]
+                pb_width = result.shape[2]
+                # self.ui.textEdit_exam.append("ok3")
+
+                #picture process
+                self.img = cv2.resize(self.img, (pb_width, pb_height))
+                input_test = []
+                input_test.append(self.img)
+                input_test = np.array(input_test)
+                input_test.astype("float32")
+                input_test = input_test / 255
+
+                prediction = sess.run(result, feed_dict={input_x: input_test[0:1]})#一次僅能投一張圖片
+                predict_loss = sess.run(loss,feed_dict={input_x: input_test[0:1]})
+
+                diff = np.abs(prediction - input_test)
+                self.plot_defect.imshow(diff[0])
+                self.plot_defect.axis("off")
+                self.Fig_exam.draw()  # 一定要這行才能顯示出圖片
+
+                #read the train loss from csv file
+                file_name = "train_notes.csv"
+                with open(file_name) as csvFile:
+                    # fields = ["average loss"]
+                    dictReader = csv.DictReader(csvFile)
+                    for item in dictReader:
+                        train_loss = item["average loss"]
+
+                try:
+                    train_loss = float(train_loss)
+                    self.ui.textEdit_exam.append("average loss = {}".format(train_loss))
+                    self.ui.textEdit_exam.append("exam pic loss = {}".format(predict_loss))
+                    self.ui.textEdit_exam.append("average loss type= {}".format(type(train_loss)))
+                    self.ui.textEdit_exam.append("exam pic loss type= {}".format(type(predict_loss)))
+                except ValueError:
+                    self.ui.textEdit_exam.append("train loss is not float value")
+
+
+                # if predict_loss > train_loss:
+                #     self.ui.textEdit_exam.append("The picture is good")
+                #
+                # else:
+                #     self.ui.textEdit_exam.append("The picture is NG")
+
+
+
 
 
 

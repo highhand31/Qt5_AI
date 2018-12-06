@@ -241,7 +241,7 @@ class Ui_Form(object):
         self.label_14.setText(_translate("Form", "epoch:"))
         self.epochEdit.setText(_translate("Form", "10"))
         self.label_15.setText(_translate("Form", "batch size:"))
-        self.batchEdit.setText(_translate("Form", "12"))
+        self.batchEdit.setText(_translate("Form", "1"))
         self.label_16.setText(_translate("Form", "GPU ratio:"))
         self.gpuratioEdit.setText(_translate("Form", "0.3"))
         self.chkB_finetune.setText(_translate("Form", "fine tune"))

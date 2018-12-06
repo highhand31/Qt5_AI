@@ -9,6 +9,7 @@ import time
 import matplotlib.pyplot as plt
 import common as cm
 import json
+import csv
 
 
 save_path = r"model_saver\AE_circle"
@@ -17,7 +18,7 @@ height = 64
 width = 64
 epochs = 50
 GPU_ratio = 0.5
-batch_size = 12
+batch_size = 1
 train_ratio = 0.7
 
 class AE():
@@ -26,8 +27,8 @@ class AE():
 
         self.input_dim = input_dim
         self.save_path = save_path
-        self.kel_x = 9
-        self.kel_y = 9
+        self.kel_x = 5
+        self.kel_y = 5
         self.deep = 64
         self.UDP_init_flag = False
         self.UDP_init()
@@ -103,77 +104,199 @@ class AE():
 
         self.out_dir_prefix = os.path.join(save_path, "model")
 
-        self.loss = tf.reduce_mean(tf.pow(self.prediction - self.input_x, 2),name="output")
+        self.loss = tf.reduce_mean(tf.pow(self.prediction - self.input_x, 2),name="loss")
 
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(self.loss)
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.loss)
+
 
     def __inference(self, input_x):
+        net = tf.layers.conv2d(
+            inputs=input_x,
+            filters=64,
+            kernel_size=[self.kel_x, self.kel_y],
+            kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.1),
+            padding="same",
+            activation=tf.nn.relu)
 
-        with slim.arg_scope([slim.conv2d, slim.fully_connected, slim.conv2d_transpose],
-                            activation_fn=tf.nn.relu,
-                            # normalizer_fn=slim.batch_norm,
-                            # normalizer_params={'is_training': True, 'decay': 0.995},
-                            weights_initializer=tf.truncated_normal_initializer(0.0, 0.01),
-                            weights_regularizer=slim.l2_regularizer(0.0005),
-                            reuse=tf.AUTO_REUSE):
-            self.net = slim.conv2d(self.input_x, 64, [self.kel_x, self.kel_y], scope='encode1')
-            self.net = slim.max_pool2d(self.net, [2, 2], scope='pool1')
-            print("encode1 shape = ", self.net.shape)
+        # net=tf.layers.max_pooling2d(inputs=net, pool_size=[2, 2], strides=2)
+        net, pool1_indices = tf.nn.max_pool_with_argmax(net, ksize=[1, 2, 2, 1],
+                                                        strides=[1, 2, 2, 1], padding='SAME', name='pool1')
 
-            # net shape = 32 x 32 x 64
+        encode1 = net
 
-            self.net = slim.conv2d(self.net, 64, [self.kel_x, self.kel_y], scope='encode2')
-            self.net = slim.max_pool2d(self.net, [2, 2], scope='pool2')
-            print("encode2 shape = ", self.net.shape)
+        print("encode_1 shape = ", net.shape)
+        # -----------------------------------------------------------------------
+        # net shape = 32 x 32 x 64
 
-            # net shape = 16 x 16 x 64
+        net = tf.layers.conv2d(
+            inputs=net,
+            filters=64,
+            kernel_size=[self.kel_x, self.kel_y],
+            kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.1),
+            padding="same",
+            activation=tf.nn.relu)
 
-            self.net = slim.conv2d(self.net, 64, [self.kel_x, self.kel_y], scope='encode3')
-            self.net = slim.max_pool2d(self.net, [2, 2], scope='pool3')
-            print("encode3 shape = ", self.net.shape)
+        # net=tf.layers.max_pooling2d(inputs=net, pool_size=[2, 2], strides=2)
+        net, pool2_indices = tf.nn.max_pool_with_argmax(net, ksize=[1, 2, 2, 1],
+                                                        strides=[1, 2, 2, 1], padding='SAME', name='pool2')
 
-            # net shape = 8 x 8 x 64
+        encode2 = net
 
-            self.net = slim.conv2d(self.net, 64, [self.kel_x, self.kel_y], scope='encode4')
-            self.net = slim.max_pool2d(self.net, [2, 2], scope='pool4')
-            print("encode4 shape = ", self.net.shape)
+        print("encode_2 shape = ", net.shape)
+        # -----------------------------------------------------------------------
+        # data= 16 x 16 x 64
 
-            # net shape = 4 x 4 x 64
+        net = tf.layers.conv2d(
+            inputs=net,
+            filters=64,
+            kernel_size=[self.kel_x, self.kel_y],
+            kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.1),
+            padding="same",
+            activation=tf.nn.relu)
 
-            self.net = slim.conv2d_transpose(self.net, 64, [2, 2], stride=2, activation_fn=None, padding="VALID",
-                                             scope="unpool1")
-            self.net = slim.conv2d(self.net, 64, [self.kel_x, self.kel_y], scope='decode1_1')
-            print("decode1 shape = ", self.net.shape)
+        # net=tf.layers.max_pooling2d(inputs=net, pool_size=[2, 2], strides=2)
+        net, pool3_indices = tf.nn.max_pool_with_argmax(net, ksize=[1, 2, 2, 1],
+                                                        strides=[1, 2, 2, 1], padding='SAME', name='pool3')
 
-            # net shape = 8 x 8 x 64
+        encode3 = net
 
-            self.net = slim.conv2d_transpose(self.net, 64, [2, 2], stride=2, activation_fn=None, padding="VALID",
-                                             scope="unpool2")
-            self.net = slim.conv2d(self.net, 64, [self.kel_x, self.kel_y], scope='decode2_3')
-            print("decode2 shape = ", self.net.shape)
+        print("encode_3 shape = ", net.shape)
+        # -----------------------------------------------------------------------
+        # data= 8 x 8 x 64
 
-            # net shape = 16 x 16 x 64
+        net = tf.layers.conv2d(
+            inputs=net,
+            filters=64,
+            kernel_size=[self.kel_x, self.kel_y],
+            kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.1),
+            padding="same",
+            activation=tf.nn.relu)
 
-            self.net = slim.conv2d_transpose(self.net, 64, [2, 2], stride=2, activation_fn=None, padding="VALID",
-                                             scope="unpool3")
-            # net = unpooling(net,[64,64])
-            self.net = slim.conv2d(self.net, 64, [self.kel_x, self.kel_y], scope='decode3_1')
-            print("decode3 shape = ", self.net.shape)
+        # net=tf.layers.max_pooling2d(inputs=net, pool_size=[2, 2], strides=2)
+        net, pool4_indices = tf.nn.max_pool_with_argmax(net, ksize=[1, 2, 2, 1],
+                                                        strides=[1, 2, 2, 1], padding='SAME', name='pool4')
 
-            # net shape = 32 x 32 x 64
+        encode4 = net
 
-            self.net = slim.conv2d_transpose(self.net, 64, [2, 2], stride=2, activation_fn=None, padding="VALID",
-                                             scope="unpool4")
-            # net = unpooling(net,[64,64])
-            self.net = slim.conv2d(self.net, 3, [self.kel_x, self.kel_y], scope='decode4')#name = "decode4/Relu"
-            # net +=net1
-            print("decode4 shape = ", self.net.shape)
+        print("encode_4 shape = ", net.shape)
+        # -----------------------------------------------------------------------
 
-            # net shape = 64 x 64 x 3
+        # data= 4 x 4 x 64
 
-            return self.net
+        # net = tf.layers.conv2d_transpose(net,64,[2,2],strides=2,padding='VALID',
+        #                                 #bias_initializer=tf.ones_initializer(),
+        #                                 #kernel_initializer=tf.ones_initializer()
+        #                                 )
+        net = self.unpool_with_argmax(net, pool4_indices, batch_size, name="Unpool1", ksize=[1, 2, 2, 1])
 
-    def train(self, train_data, test_data, test_label, GPU_ratio=0.2, epochs=50, batch_size=16, fine_tune=False,
+        net = tf.layers.conv2d(
+            inputs=net,
+            filters=64,
+            kernel_size=[self.kel_x, self.kel_y],
+            kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.1),
+            padding="same",
+            activation=tf.nn.relu)
+
+        decode1 = net
+
+        print("decode_1 shape = ", net.shape)
+        # -----------------------------------------------------------------------
+        # data= 8 x 8 x 64
+
+        # net = tf.layers.conv2d_transpose(net,64,[2,2],strides=2,padding='VALID',
+        #                                 #bias_initializer=tf.ones_initializer(),
+        #                                 #kernel_initializer=tf.ones_initializer()
+        #                                 )
+        net = self.unpool_with_argmax(net, pool3_indices, batch_size, name="Unpool2", ksize=[1, 2, 2, 1])
+
+        net = tf.layers.conv2d(
+            inputs=net,
+            filters=64,
+            kernel_size=[self.kel_x, self.kel_y],
+            kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.1),
+            padding="same",
+            activation=tf.nn.relu)
+
+        decode2 = net
+
+        print("decode_2 shape = ", net.shape)
+        # -----------------------------------------------------------------------
+        # data= 16 x 16 x 64
+
+        # net = tf.layers.conv2d_transpose(net,64,[2,2],strides=2,padding='VALID',
+        #                                 #bias_initializer=tf.ones_initializer(),
+        #                                 #kernel_initializer=tf.ones_initializer()
+        #                                 )
+        net = self.unpool_with_argmax(net, pool2_indices, batch_size, name="Unpool3", ksize=[1, 2, 2, 1])
+
+        net = tf.layers.conv2d(
+            inputs=net,
+            filters=64,
+            kernel_size=[self.kel_x, self.kel_y],
+            kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.1),
+            padding="same",
+            activation=tf.nn.relu)
+
+        decode3 = net
+
+        print("decode_3 shape = ", net.shape)
+        # -----------------------------------------------------------------------
+        # data= 32 x 32 x 64
+
+        # net = tf.layers.conv2d_transpose(net,64,[2,2],strides=2,padding='VALID',
+        #                                 #bias_initializer=tf.ones_initializer(),
+        #                                 #kernel_initializer=tf.ones_initializer()
+        #                                 )
+
+        net = self.unpool_with_argmax(net, pool1_indices, batch_size, name="Unpool4", ksize=[1, 2, 2, 1])
+
+        net = tf.layers.conv2d(
+            inputs=net,
+            filters=3,
+            kernel_size=[self.kel_x, self.kel_y],
+            kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.1),
+            padding="same",
+            activation=tf.nn.relu,
+            name="output")
+
+        decode4 = net
+
+        print("decode_4 shape = ", net.shape)
+        # -----------------------------------------------------------------------
+        # data= 64 x 64 x 3
+
+        return net
+
+    def unpool_with_argmax(self,pool, ind, batch_size, name=None, ksize=[1, 2, 2, 1]):
+        """
+           Unpooling layer after max_pool_with_argmax.
+           Args:
+               pool:   max pooled output tensor
+               ind:      argmax indices
+               ksize:     ksize is the same as for the pool
+           Return:
+               unpool:    unpooling tensor
+        """
+        with tf.variable_scope(name):
+
+            input_shape = pool.get_shape().as_list()
+            output_shape = (batch_size, input_shape[1] * ksize[1], input_shape[2] * ksize[2], input_shape[3])
+
+            flat_output_shape = [batch_size, output_shape[1] * output_shape[2] * output_shape[3]]
+            flat_input_size = np.prod(batch_size * input_shape[1] * input_shape[2] * input_shape[3])
+
+            pool_ = tf.reshape(pool, [flat_input_size])
+            batch_range = tf.reshape(tf.range(batch_size, dtype=ind.dtype), shape=[batch_size, 1, 1, 1])
+            b = tf.ones_like(ind) * batch_range
+            b = tf.reshape(b, [flat_input_size, 1])
+            ind_ = tf.reshape(ind, [flat_input_size, 1])
+            ind_ = tf.concat([b, ind_], 1)
+
+            ret = tf.scatter_nd(ind_, pool_, shape=flat_output_shape)
+            ret = tf.reshape(ret, output_shape)
+            return ret
+
+    def train(self, train_data, test_data, test_label, GPU_ratio=0.2, epochs=50, batch_size=1, fine_tune=False,
               save_ckpt=True):
 
         #             self.GPU_ratio = GPU_ratio
@@ -228,7 +351,7 @@ class AE():
 
                     sess.run(self.optimizer, feed_dict={self.input_x: train_data[num_start:num_end]})
 
-                # compute mean loss after a epoch
+                # train data mean loss after a epoch
                 train_loss = []
                 for index in range(train_data.shape[0]):
                     single_loss = sess.run(self.loss, feed_dict={self.input_x: train_data[index:index + 1]})
@@ -238,6 +361,16 @@ class AE():
                 train_loss = np.array(train_loss)
                 train_loss = np.mean(train_loss)
 
+                #record train loss in the csv file
+                file_name = "train_notes.csv"
+                with open(file_name,"w") as csvFile:
+                    fields = ["average loss"]
+                    dictWriter = csv.DictWriter(csvFile,fieldnames=fields)
+                    dictWriter.writeheader()
+                    dictWriter.writerow({"average loss":train_loss})
+
+
+                # test data mean loss after a epoch
                 test_loss = []
                 acc = 0
                 for index in range(test_data.shape[0]):
@@ -276,7 +409,7 @@ class AE():
                 graph = tf.get_default_graph().as_graph_def()
                 # output_graph_def = graph_util.convert_variables_to_constants(sess, graph,['output'])  # graph也可以直接填入sess.graph_def
                 output_graph_def = graph_util.convert_variables_to_constants(sess, graph,
-                                                                             ['decode4/Relu'])  # graph也可以直接填入sess.graph_def
+                                                                             ['output/Relu','loss'])  # graph也可以直接填入sess.graph_def
 
 
                 # 'model_saver/'為置放的資料夾，'combined_model.pb'為檔名
