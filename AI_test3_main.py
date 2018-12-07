@@ -131,9 +131,7 @@ class AppWindow(QMainWindow):
         self.ui = Ui_Form()
         self.ui.setupUi(self)
 
-        # 建立圖片格式的集合
-        self.pic_format = {".jpg", ".jpeg", ".jpe", ".bmp", ".dib", ".jp2", ".png", ".webp", ".pbm",
-                           ".pgm", ".ppm", ".sr", ".ras", ".tiff", ".tif"}
+
 
         #UI init
         self.ui.batchEdit.setHidden(True)#隱藏，因為使用unpool_with_argmax，batch size限制在1
@@ -504,7 +502,9 @@ class AppWindow(QMainWindow):
             # self.thread_2.started.connect(self.my_receiver.run)
             # self.thread_2.start()
         else:
+            self.ui.consoleEdit.setTextColor(Qt.red)
             self.ui.consoleEdit.append("UI inputs are not completed, plz see msg above\n")
+            self.ui.consoleEdit.setTextColor(Qt.black)
             self.ui.btn_data_process.setEnabled(True)
 
 
@@ -513,13 +513,23 @@ class AppWindow(QMainWindow):
         self.ui.consoleEdit.append("Start to exam UI inputs")
 
         # train dir check
+            #確認是否有資料夾名稱
         if self.train_dir_name == "":
             self.ui.consoleEdit.setTextColor(Qt.red)
             self.ui.consoleEdit.append("No train dir")
             self.ui.consoleEdit.setTextColor(Qt.black)
             all_data_checked = False
         else:
-            self.AI_var["train_dir_name"] = self.train_dir_name
+
+            #確認資料夾裡是否有圖片
+            pic_num,pic_addr = self.pic_addr_check(self.train_dir_name)
+            if pic_num < 1:
+                self.ui.consoleEdit.setTextColor(Qt.red)
+                self.ui.consoleEdit.append("訓練資料夾裡沒有圖片")
+                self.ui.consoleEdit.setTextColor(Qt.black)
+                all_data_checked = False
+            else:
+                self.AI_var["train_dir_name"] = self.train_dir_name
 
         # resize height check(integer,>0)
         try:#使用try and except檢驗是否為integer
@@ -582,13 +592,22 @@ class AppWindow(QMainWindow):
         # self.ui.consoleEdit.append(str(self.train_has_dir))
 
         # test dir check
+            #確認test資料夾檔名是否為空
         if self.test_dir_name == "":
             self.ui.consoleEdit.setTextColor(Qt.red)
             self.ui.consoleEdit.append("No test dir")
             self.ui.consoleEdit.setTextColor(Qt.black)
             all_data_checked = False
         else:
-            self.AI_var["test_dir_name"] = self.test_dir_name
+            #確認資料夾裡是否有圖片
+            pic_num, pic_addr = self.pic_addr_check(self.test_dir_name)
+            if pic_num < 1:
+                self.ui.consoleEdit.setTextColor(Qt.red)
+                self.ui.consoleEdit.append("驗證資料夾裡沒有圖片")
+                self.ui.consoleEdit.setTextColor(Qt.black)
+                all_data_checked = False
+            else:
+                self.AI_var["test_dir_name"] = self.test_dir_name
 
         # test ratio(floating number) check
         # try:
@@ -677,14 +696,21 @@ class AppWindow(QMainWindow):
         self.ui.btn_data_process.setEnabled(True)
 
     def pic_addr_check(self,pic_path):
+        # 建立圖片格式的集合
+        self.pic_format = {".jpg", ".jpeg", ".jpe", ".bmp", ".dib", ".jp2", ".png", ".webp", ".pbm",
+                           ".pgm", ".ppm", ".sr", ".ras", ".tiff", ".tif"}
         temp = [file.path for file in os.scandir(pic_path) if file.is_file()]
         pic_addrs = []
+        pic_num = 0
         for item in temp:
             # 分離路徑的副檔名，[-1]表示檔案的格式
             item_format = os.path.splitext(item)[-1]
             # 檢查檔案格式是否屬於預設的圖片格式
             if item_format in self.pic_format:
-                self.exam_pic_addrs.append(item)
+                pic_addrs.append(item)
+                pic_num += 1
+
+        return (pic_num,pic_addrs)
 
 
 
