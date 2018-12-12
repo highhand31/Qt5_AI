@@ -1,12 +1,13 @@
 import tensorflow as tf
 from tensorflow.python.framework import graph_util
-from tensorflow.contrib import slim
-import cv2
+from tensorflow import contrib
+# from tensorflow.contrib import slim
+# import cv2
 import os
 import numpy as np
 import socket as sc
-import time
-import matplotlib.pyplot as plt
+# import time
+# import matplotlib.pyplot as plt
 import common as cm
 import json
 import csv
@@ -14,8 +15,8 @@ import csv
 
 save_path = r"model_saver\AE_circle"
 out_dir_prefix=os.path.join(save_path,"model")
-height = 64
-width = 64
+height = 128
+width = 128
 epochs = 50
 GPU_ratio = 0.5
 batch_size = 1
@@ -94,19 +95,15 @@ class AE():
         self.input_x = tf.placeholder(tf.float32, self.input_dim, name="input_x")
 
         self.prediction = self.__inference(self.input_x)
+        self.loss = tf.reduce_mean(tf.pow(self.prediction - self.input_x, 2),name="loss")
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.loss)
 
         self.save_path = save_path
-
+        self.out_dir_prefix = os.path.join(save_path, "model")
         if not os.path.exists(self.save_path):
             os.makedirs(self.save_path)
 
         self.saver = tf.train.Saver(max_to_keep=20)
-
-        self.out_dir_prefix = os.path.join(save_path, "model")
-
-        self.loss = tf.reduce_mean(tf.pow(self.prediction - self.input_x, 2),name="loss")
-
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.loss)
 
 
     def __inference(self, input_x):
@@ -320,6 +317,8 @@ class AE():
 
         with tf.Session(config=config) as sess:
 
+            print("開始與GPU做連結，這部分會花比較久時間，請耐心等候")
+
             if fine_tune is True:  # 使用已經訓練好的權重繼續訓練
                 files = [file.path for file in os.scandir(self.save_path) if file.is_file()]
 
@@ -339,109 +338,113 @@ class AE():
                 sess.run(tf.global_variables_initializer())
                 print('no previous model param can be used')
 
-            for epoch in range(epochs):
-
-                for index in range(total_batches):
-
-                    num_start = index * batch_size
-                    num_end = num_start + batch_size
-
-                    if num_end >= train_data.shape[0] and batch_size > 1:
-                        num_end = train_data.shape[0] - 1
-
-                    sess.run(self.optimizer, feed_dict={self.input_x: train_data[num_start:num_end]})
-
-                # train data mean loss after a epoch
-                train_loss = []
-                for index in range(train_data.shape[0]):
-                    single_loss = sess.run(self.loss, feed_dict={self.input_x: train_data[index:index + 1]})
-
-                    train_loss.append(single_loss)
-
-                train_loss = np.array(train_loss)
-                train_stdv = np.std(train_loss)
-                train_loss = np.mean(train_loss)
-
-                #record train loss in the csv file
-                file_name = "train_notes.csv"
-                with open(file_name,"w") as csvFile:
-                    fields = ["average loss","stdv"]
-                    dictWriter = csv.DictWriter(csvFile,fieldnames=fields)
-                    dictWriter.writeheader()
-                    dictWriter.writerow({"average loss":train_loss, "stdv":train_stdv})
 
 
-                # test data mean loss after a epoch
-                test_loss = []
-                acc = 0
-                for index in range(test_data.shape[0]):
+            try:
+                for epoch in range(epochs):
 
-                    single_loss = sess.run(self.loss, feed_dict={self.input_x: test_data[index:index + 1]})
+                    for index in range(total_batches):
 
-                    test_loss.append(single_loss)
+                        num_start = index * batch_size
+                        num_end = num_start + batch_size
 
-                    if single_loss > train_loss:
+                        if num_end >= train_data.shape[0] and batch_size > 1:
+                            num_end = train_data.shape[0] - 1
 
-                        if test_label[index] == 0 or test_label[index] == 1:
-                            acc += 1
+                        sess.run(self.optimizer, feed_dict={self.input_x: train_data[num_start:num_end]})
 
-                    elif single_loss >= 0:
+                    # train data mean loss after a epoch
+                    train_loss = []
+                    for index in range(train_data.shape[0]):
+                        single_loss = sess.run(self.loss, feed_dict={self.input_x: train_data[index:index + 1]})
 
-                        if test_label[index] == 2:
-                            acc += 1
+                        train_loss.append(single_loss)
 
-                acc /= test_data.shape[0]
-                test_loss = np.array(test_loss)
-                test_loss = np.mean(test_loss)
-                msg = "Epoch {}\ntrain set loss = {}".format(epoch, train_loss)
-                print(msg)
-                #self.UDP_send(msg,self.send_address)
+                    train_loss = np.array(train_loss)
+                    train_stdv = np.std(train_loss)
+                    train_loss = np.mean(train_loss)
 
-                msg = "test set loss = {}, accuracy = {}".format(test_loss, acc)
-                print(msg)
-                #self.UDP_send(msg, self.send_address)
-
-                # 紀錄資料:本次epoch ckpt檔
-                if save_ckpt is True:
-                    model_save_path = self.saver.save(sess, self.out_dir_prefix, global_step=epoch)
-
-                    print('Save model checkpoint to ', model_save_path)
-
-                graph = tf.get_default_graph().as_graph_def()
-                # output_graph_def = graph_util.convert_variables_to_constants(sess, graph,['output'])  # graph也可以直接填入sess.graph_def
-                output_graph_def = graph_util.convert_variables_to_constants(sess, graph,
-                                                                             ['output/Relu','loss'])  # graph也可以直接填入sess.graph_def
+                    #record train loss in the csv file
+                    file_name = "train_notes.csv"
+                    with open(file_name,"w") as csvFile:
+                        fields = ["average loss","stdv"]
+                        dictWriter = csv.DictWriter(csvFile,fieldnames=fields)
+                        dictWriter.writeheader()
+                        dictWriter.writerow({"average loss":train_loss, "stdv":train_stdv})
 
 
-                # 'model_saver/'為置放的資料夾，'combined_model.pb'為檔名
-                with tf.gfile.GFile("model_saver/pb_test_model.pb", "wb") as f:
+                    # test data mean loss after a epoch
+                    test_loss = []
+                    acc = 0
+                    for index in range(test_data.shape[0]):
 
-                    f.write(output_graph_def.SerializeToString())
+                        single_loss = sess.run(self.loss, feed_dict={self.input_x: test_data[index:index + 1]})
+                        test_loss.append(single_loss)
+                        if single_loss > train_loss:
 
-                #training data collection
-                # 原本train_loss的型態是numpy.float32，進行json序列化會失敗，要改成python內建的float型態才能進行json序列化
+                            if test_label[index] > 0:
+                                acc += 1
 
-                self.train_loss_set.append(float(train_loss))
-                # print("type of train loss = {}".format(type(train_loss)))
-                # print("type of acc = {}".format(type(acc)))
-                self.acc_set.append(acc)
+                        elif single_loss >= 0:
 
-                # self.UDP_dict["train loss"] = self.train_loss_set
-                # self.UDP_dict["acc"] = self.acc_set
-                # for name,value in self.UDP_dict.items():
-                #     print("{} = {}".format(name,value))
+                            if test_label[index] == 0:
+                                acc += 1
 
-                #UDP sender
-                if self.UDP_init_flag:
-                    self.UDP_dict["mode"] = "dict"
-                    self.UDP_dict["train loss"] = self.train_loss_set
-                    self.UDP_dict["acc"] = self.acc_set
-                    jsonObj = json.dumps(self.UDP_dict)#若要傳送dict，需要先進行json化
-                    # jsonObj = json.dumps(self.train_loss_set)
-                    # self.UDP_send("UDP sender:loss = {},acc = {}".format(train_loss,acc),self.send_address)
-                    self.UDP_send(jsonObj,self.send_address)
+                    acc /= test_data.shape[0]
+                    test_loss = np.array(test_loss)
+                    test_loss = np.mean(test_loss)
+                    msg = "Epoch {}\ntrain set loss = {}".format(epoch, train_loss)
+                    print(msg)
+                    #self.UDP_send(msg,self.send_address)
 
-                #return train_loss, acc
+                    msg = "test set loss = {}, accuracy = {}".format(test_loss, acc)
+                    print(msg)
+                    #self.UDP_send(msg, self.send_address)
+
+                    # 紀錄資料:本次epoch ckpt檔
+                    if save_ckpt is True:
+                        model_save_path = self.saver.save(sess, self.out_dir_prefix, global_step=epoch)
+
+                        print('Save model checkpoint to ', model_save_path)
+
+                    graph = tf.get_default_graph().as_graph_def()
+                    # output_graph_def = graph_util.convert_variables_to_constants(sess, graph,['output'])  # graph也可以直接填入sess.graph_def
+                    output_graph_def = graph_util.convert_variables_to_constants(sess, graph,
+                                                                                 ['output/Relu','loss'])  # graph也可以直接填入sess.graph_def
+
+
+                    # 'model_saver/'為置放的資料夾，'combined_model.pb'為檔名
+                    with tf.gfile.GFile("model_saver/pb_test_model.pb", "wb") as f:
+
+                        f.write(output_graph_def.SerializeToString())
+
+                    #training data collection
+                    # 原本train_loss的型態是numpy.float32，進行json序列化會失敗，要改成python內建的float型態才能進行json序列化
+
+                    self.train_loss_set.append(float(train_loss))
+                    # print("type of train loss = {}".format(type(train_loss)))
+                    # print("type of acc = {}".format(type(acc)))
+                    self.acc_set.append(acc)
+
+                    # self.UDP_dict["train loss"] = self.train_loss_set
+                    # self.UDP_dict["acc"] = self.acc_set
+                    # for name,value in self.UDP_dict.items():
+                    #     print("{} = {}".format(name,value))
+
+                    #UDP sender
+                    if self.UDP_init_flag:
+                        self.UDP_dict["mode"] = "dict"
+                        self.UDP_dict["train loss"] = self.train_loss_set
+                        self.UDP_dict["acc"] = self.acc_set
+                        jsonObj = json.dumps(self.UDP_dict)#若要傳送dict，需要先進行json化
+                        # jsonObj = json.dumps(self.train_loss_set)
+                        # self.UDP_send("UDP sender:loss = {},acc = {}".format(train_loss,acc),self.send_address)
+                        self.UDP_send(jsonObj,self.send_address)
+
+                    # return train_loss, acc
+            except:
+                print("執行訓練時出現錯誤，可能在使用fine tune時，height,width與模型不符合")
+
 
     def eval(self, train_data, test_data, test_label, GPU_ratio=0.2):
 
@@ -500,7 +503,8 @@ class AE():
 if __name__ == "__main__":
 
     #prepare training data
-    pic_path = r'./goodsamples'
+    # pic_path = r'E:\dataset\forAE\pill\train\Good'
+    pic_path = r'E:\dataset\forAE\circle\train\Good'
     #pic_path = r"G:/我的雲端硬碟/Python/Code/Pycharm/P_UI_Test/goodsamples"
     # pic_path = r"G://我的雲端硬碟//Python//Code//Pycharm//P_UI_Test//goodsamples"
     #pic_path = "G:\\我的雲端硬碟\\Python\\Code\\Pycharm\\P_UI_Test\\goodsamples"
@@ -508,17 +512,21 @@ if __name__ == "__main__":
     #pic_path = "E:/dataset/Surface_detection/0"
     (x_train, x_train_label, no1, no2) = cm.data_load(pic_path, train_ratio=1, resize=(width, height), has_dir=False)
     print(x_train.shape)
+    #print("這是打包exe中文的輸出測試")
     # print(x_train_label)
 
 
     #prepare test data
-    pic_path = r'./xxx'
-    (x_train_2,x_train_label_2,x_test_2,x_test_label_2) = cm.data_load(pic_path,train_ratio,resize=(width,height),shuffle = True,normalize = True)
+    #pic_path = r'E:\dataset\forAE\pill\test'
+    pic_path = r'E:\dataset\forAE\circle\test'
+    (no_care,no_care_2,x_test,x_test_label) = cm.data_load(pic_path,train_ratio=0,resize=(width,height),shuffle = True,normalize = True)
     # print('x_train shape = ',x_train_2.shape)
     # print('x_train_label shape = ',x_train_label_2.shape)
-    print('x_test shape = ',x_test_2.shape)
-    print('x_test_label shape = ',x_test_label_2.shape)
+    print('x_test shape = ',x_test.shape)
+    print('x_test_label shape = ',x_test_label.shape)
+    #print("這是打包exe中文的輸出測試")
 
 
     ae = AE()
-    ae.train(x_train,x_test_2,x_test_label_2,epochs = 5)
+    ae.train(x_train,x_test,x_test_label,epochs = 50,fine_tune=True)
+    print("AI訓練結束")

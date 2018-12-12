@@ -16,6 +16,8 @@ from tensorflow.python.platform import gfile
 import numpy as np
 import cv2
 import time
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+
 
 class WriteStream(object):
     def __init__(self,queue):
@@ -96,19 +98,21 @@ class AI_model(QObject):
             print("{} = {}".format(name,value))
 
     def run(self):
-        print("Start train data pre-process\n")
-        (x_train, y_train_label, no1, no2) = cm.data_load(self.train_dir_name, train_ratio=self.train_ratio,
-                                                          resize=(self.resize_width,self.resize_height),
-                                                          has_dir=self.train_has_dir)
-        print('Training data shape = {}'.format(x_train.shape))
+        try:
+            print("Start train data pre-process\n")
+            (x_train, y_train_label, no1, no2) = cm.data_load(self.train_dir_name, train_ratio=self.train_ratio,
+                                                              resize=(self.resize_width,self.resize_height),
+                                                              has_dir=self.train_has_dir)
+            print('Training data shape = {}'.format(x_train.shape))
 
-
-        print("Start test data pre-process\n")
-        (x_train_2, y_train_label_2, x_test, y_test_label) = cm.data_load(self.test_dir_name, train_ratio=0,
-                                                          resize=(self.resize_width, self.resize_height),
-                                                          has_dir=self.test_has_dir)
-        print('Test data shape = {}'.format(x_test.shape))
-        print('Test label shape = {}'.format(y_test_label.shape))
+            print("Start test data pre-process\n")
+            (x_train_2, y_train_label_2, x_test, y_test_label) = cm.data_load(self.test_dir_name, train_ratio=0,
+                                                              resize=(self.resize_width, self.resize_height),
+                                                              has_dir=self.test_has_dir)
+            print('Test data shape = {}'.format(x_test.shape))
+            print('Test label shape = {}'.format(y_test_label.shape))
+        except:
+            print("在進行訓練資料前處理時發生錯誤")
 
         self.ae = AI.AE()
         self.ae.train(x_train,x_test,y_test_label,self.GPU_ratio,self.epoch,
@@ -123,15 +127,44 @@ class AppWindow(QMainWindow):
         self.ui.setupUi(self)
 
         # UI init
+        #-->Tab:train
+        self.ui.label_ver.setText("Version: 1.0.1")
         self.ui.batchEdit.setHidden(True)  # 隱藏，因為使用unpool_with_argmax，batch size限制在1
         self.ui.label_15.setHidden(True)  # 隱藏，因為使用unpool_with_argmax，batch size限制在1
         #self.ui.chkB_finetune.setHidden(True)#不提供fine tune
 
-        #-->Tab:exam
+            # setup train graphics
+        self.Fig_train = MyFigure(width=4, height=4)  # 顯示training accuracy
+            #在GUI的graphicsView上建立QGraphicsScene，再其上增加以matplotlib圖形為主的FigureCanvas物件
+        # self.scene_2 = QGraphicsScene()  # 建立場景QGraphicsScene
+        # self.scene_2.addWidget(self.Fig_train)  # 將圖形元素添加到場景中
+        # self.ui.graphV_train.setScene(self.scene_2)  # 將場景添加至graphicsView中
+        # self.ui.graphV_train.show()  # 顯示
+        self.plot_train = self.Fig_train.fig.add_subplot(1, 1, 1)  # 在圖形元素中添加圖
 
+        self.plot_train_toolbar = NavigationToolbar(self.Fig_train, self)  # 添加完整的 toolbar
+        self.plot_train_layout = QGridLayout(self.ui.graphV_train)  # 繼承容器groupBox
+        self.plot_train_layout.addWidget(self.Fig_train)#將Fig加至graphicsView上
+        self.plot_train_layout.addWidget(self.plot_train_toolbar)#將toolbar加至graphicsView上
+
+        # self.plot_train.axis("off")
+
+        #-->Tab:exam
         self.ui.btn_detect.setEnabled(False)#未有資料夾路徑前要disable
         self.ui.btn_prev.setEnabled(False)#未有資料夾路徑前要disable
         self.ui.btn_next.setEnabled(False)#未有資料夾路徑前要disable
+
+            # setup exam graphics
+        self.Fig_normal = MyFigure(width=4, height=4)  # 顯示normal pic
+        # self.Fig_exam = MyFigure(width=3, height=3)  # 顯示exam pic
+
+            # 在GUI的graphicsView上建立QGraphicsScene，再其上增加以matplotlib圖形為主的FigureCanvas物件
+        self.scene_1 = QGraphicsScene()  # 建立場景QGraphicsScene
+        self.scene_1.addWidget(self.Fig_normal)  # 將圖形元素添加到場景中
+        self.ui.graphV_normal.setScene(self.scene_1)  # 將場景添加至graphicsView中
+        self.ui.graphV_normal.show()  # 顯示
+        self.plot_normal = self.Fig_normal.fig.add_subplot(1, 1, 1)  # 在圖形元素中添加圖
+        self.plot_normal.axis("off")
 
         # variables init
         self.train_dir_name = self.ui.train_dir_display.placeholderText()
@@ -170,17 +203,7 @@ class AppWindow(QMainWindow):
         self.thread_UDP_listener.started.connect(self.UDP_listen.run)
         self.thread_UDP_listener.start()
 
-        # setup exam graphics
-        self.Fig_normal = MyFigure(width=4, height=4)  # 顯示normal pic
-        # self.Fig_exam = MyFigure(width=3, height=3)  # 顯示exam pic
 
-        # 在GUI的graphicsView上建立QGraphicsScene，再其上增加以matplotlib圖形為主的FigureCanvas物件
-        self.scene_1 = QGraphicsScene()  # 建立場景QGraphicsScene
-        self.scene_1.addWidget(self.Fig_normal)  # 將圖形元素添加到場景中
-        self.ui.graphV_normal.setScene(self.scene_1)  # 將場景添加至graphicsView中
-        self.ui.graphV_normal.show()  # 顯示
-        self.plot_normal = self.Fig_normal.fig.add_subplot(1, 1, 1)  # 在圖形元素中添加圖
-        self.plot_normal.axis("off")
 
         #print("測試OK")
 
@@ -457,7 +480,7 @@ class AppWindow(QMainWindow):
                     # self.ui.textEdit_exam.append("exam pic loss type= {}".format(type(predict_loss)))
 
                     self.ui.textEdit_exam.append("The time is {}\n".format(time.asctime()))
-                    if predict_loss <= train_loss+1*train_stdv:
+                    if predict_loss <= train_loss:#+1*train_stdv:
                         self.ui.textEdit_exam.append("Good")
                     else:
                         self.ui.textEdit_exam.append("NG")
@@ -480,10 +503,10 @@ class AppWindow(QMainWindow):
         # self.ui.consoleEdit.setGeometry(QtCore.QRect(0, 440, 385, 301))#left, top, width and height
 
         #set plot visible
-        self.ui.matplotlibwidget_dynamic.setHidden(False)
+        #self.ui.matplotlibwidget_dynamic.setHidden(False)
         #self.ui.matplotlibwidget_dynamic.mpl.start_static_plot()
-        self.fig = self.ui.matplotlibwidget_dynamic.mpl.fig
-        self.axes = self.ui.matplotlibwidget_dynamic.mpl.axes
+        # self.fig = self.ui.matplotlibwidget_dynamic.mpl.fig
+        # self.axes = self.ui.matplotlibwidget_dynamic.mpl.axes
         # self.fig.suptitle('plot test')
         # t = np.arange(0.0, 3.0, 0.01)
         # s = np.sin(2 * np.pi * t)
@@ -698,6 +721,8 @@ class AppWindow(QMainWindow):
         try:
             self.GPU_ratio = float(self.ui.gpuratioEdit.text())
             if self.GPU_ratio > 0 and self.GPU_ratio <= 1.0:
+                if self.GPU_ratio == 1.0:
+                    self.GPU_ratio = 0.9#限制GPU使用量不會超過0.9
                 self.ui.consoleEdit.append("GPU ratio value is {}".format(self.GPU_ratio))
                 self.ui.consoleEdit.append("GPU ratio value is checked ok")
                 self.AI_var["GPU_ratio"] = self.GPU_ratio
@@ -743,20 +768,28 @@ class AppWindow(QMainWindow):
                 # train_loss = text["train loss"]
                 # train_loss = np.array(train_loss)
                 #self.fig.clear(True)
-                self.fig.suptitle('Loss and Accuracy')
+                self.Fig_train.fig.suptitle('Accuracy of train data')
+                #self.fig.suptitle('Loss and Accuracy')
                 #l = [np.random.randint(0, 10) for i in range(4)]
                 #self.axes.plot([0, 1, 2, 3], l, 'r')
                 #去除上一次的數值
-                self.axes.cla()
-                #繪製2條線
+                self.plot_train.cla()
+                # self.axes.cla()
+
+                #繪製線條
+                epoch_num = len(text["acc"])
+                axis_x = [num for num in range(1,epoch_num+1)]#畫圖的X軸(epoch)要從1開始
                 #self.axes.plot(text["train loss"],label="train loss")
-                self.axes.plot(text["acc"],label="accuracy")
+                self.plot_train.plot(axis_x,text["acc"],label="accuracy")
+                # self.axes.plot(text["acc"],label="accuracy")
                 #設置圖例位置
-                self.axes.legend(loc="best", shadow=True)
-                self.axes.set_ylabel('accuracy')
-                self.axes.set_xlabel('epoch')
-                self.axes.grid(True)
-                self.ui.matplotlibwidget_dynamic.mpl.draw()
+
+                self.plot_train.legend(loc="best", shadow=True)
+                self.plot_train.set_ylabel('accuracy')
+                self.plot_train.set_xlabel('epoch')
+                self.plot_train.grid(True)
+                self.Fig_train.draw()
+                # self.ui.matplotlibwidget_dynamic.mpl.draw()
 
         except ValueError:
             print("UDP receives messages with error format")
@@ -781,10 +814,13 @@ class AppWindow(QMainWindow):
     def AI_model_finish_process(self):
         self.AI_model.deleteLater()
         self.thread.quit()
+        self.ui.consoleEdit.setTextColor(Qt.blue)
         self.ui.consoleEdit.append("AI model execution is finished")
+        self.ui.consoleEdit.setTextColor(Qt.black)
         self.ui.btn_data_process.setEnabled(True)
 
 app = QApplication(sys.argv)
 w = AppWindow()
+w.setFixedSize(641,1000)#固定UI的畫面大小
 w.show()
 sys.exit(app.exec_())
