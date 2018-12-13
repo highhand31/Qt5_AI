@@ -114,7 +114,7 @@ class AI_model(QObject):
         except:
             print("在進行訓練資料前處理時發生錯誤")
 
-        self.ae = AI.AE()
+        self.ae = AI.AE(input_dim=[None, self.resize_width, self.resize_height, 3])
         self.ae.train(x_train,x_test,y_test_label,self.GPU_ratio,self.epoch,
                       self.batch_size,self.fine_tune,self.save_ckpt)
 
